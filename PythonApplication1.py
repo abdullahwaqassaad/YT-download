@@ -1,193 +1,144 @@
 import streamlit as st
 import yt_dlp
 import os
-import time
 from urllib.parse import urlparse
 
-# ========================
-# Core Download Functions
-# ========================
+# ======================
+# 🛠️ Core Functions
+# ======================
 
-def download_youtube(url):
+def download_media(url, platform):
     try:
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': 'yt_%(title)s.%(ext)s',
-            'quiet': True,
-            'extract_flat': False,
-            'force_generic_extractor': True,
-            'ignoreerrors': False,
-            'retries': 3,
-            'socket_timeout': 30,
-            'noplaylist': True,
-        }
-        
+        if platform == "youtube":
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': 'downloaded_%(title)s.%(ext)s',
+                'quiet': True,
+                'extract_flat': False,
+                'force_generic_extractor': True,
+                'retries': 3,
+                'socket_timeout': 30,
+            }
+        elif platform == "instagram":
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': 'downloaded_%(id)s.%(ext)s',
+                'quiet': True,
+                'extract_flat': False,
+                'force_generic_extractor': True,
+                'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+                'extractor_args': {'instagram': {'skip_auth': True}},
+            }
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
             if not os.path.exists(filename):
-                filename = f"yt_{info['id']}.mp4"
-                if not os.path.exists(filename):
-                    return False, "File downloaded but not found"
+                return False, "Download failed (file not found)"
             
             return True, filename
-            
+
     except Exception as e:
         return False, str(e)
 
-def download_instagram(url):
-    try:
-        # Check if cookies file exists
-        cookies_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
-        
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': 'ig_%(id)s.%(ext)s',
-            'quiet': True,
-            'extract_flat': False,
-            'force_generic_extractor': True,
-            'cookiefile': cookies_file,
-            'ignoreerrors': False,
-            'retries': 3,
-            'socket_timeout': 60,
-            'extractor_args': {
-                'instagram': {
-                    'skip_auth': False if cookies_file else True,
-                    'extract_reels': True
-                }
-            },
-            'cookiesfrombrowser': ('chrome',) if not cookies_file else None,
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                return False, "Failed to extract video info"
-            
-            filename = ydl.prepare_filename(info) if 'id' in info else f"ig_reel_{int(time.time())}.mp4"
-            
-            if not os.path.exists(filename):
-                return False, "File downloaded but not found"
-            
-            return True, filename
-            
-    except Exception as e:
-        return False, str(e)
-
-# ========================
-# URL Validators
-# ========================
+# ======================
+# 🔍 URL Validation
+# ======================
 
 def is_youtube(url):
-    domains = ['youtube.com', 'youtu.be', 'www.youtube.com']
+    domains = ['youtube.com', 'youtu.be']
     parsed = urlparse(url)
-    return (parsed.netloc.replace('www.','') in domains and 
-            any(x in parsed.path for x in ['/watch', '/shorts']))
+    return any(domain in parsed.netloc for domain in domains)
 
-def is_instagram_reel(url):
-    domains = ['instagram.com', 'www.instagram.com']
+def is_instagram(url):
+    domains = ['instagram.com']
     parsed = urlparse(url)
-    return (parsed.netloc.replace('www.','') in domains and 
-            '/reel/' in parsed.path)
+    return any(domain in parsed.netloc for domain in domains) and '/reel/' in url
 
-# ========================
-# Streamlit UI
-# ========================
+# ======================
+# 🎨 Streamlit UI
+# ======================
 
 st.set_page_config(
     page_title="Universal Video Downloader",
-    page_icon="📥",
+    page_icon="🎬",
     layout="centered"
 )
 
-st.title("📥 Universal Video Downloader")
-st.caption("Download YouTube Videos/Shorts and Instagram Reels")
+st.title("🎬 Universal Video Downloader")
+st.markdown("Download YouTube Videos/Shorts and Instagram Reels in one click!")
 
-tab_yt, tab_ig = st.tabs(["YouTube Downloader", "Instagram Downloader"])
+# ===== 📥 DOWNLOAD DIALOG BOXES ===== #
+yt_tab, insta_tab = st.tabs(["YouTube Downloader", "Instagram Downloader"])
 
-# YouTube Tab
-with tab_yt:
-    st.subheader("YouTube Video/Shorts Downloader")
-    yt_url = st.text_input(
-        "Enter YouTube URL:",
-        placeholder="https://www.youtube.com/watch?v=... or https://youtube.com/shorts/...",
-        key="yt_url"
-    )
+# YouTube Downloader
+with yt_tab:
+    st.subheader("YouTube Video/Shorts")
+    yt_url = st.text_input("Enter YouTube URL:", placeholder="https://youtube.com/watch?v=...")
     
-    yt_status = st.empty()
-    
-    if st.button("Download YouTube Video", key="yt_dl_btn"):
-        if yt_url:
-            if not is_youtube(yt_url):
-                yt_status.error("❌ Invalid YouTube URL")
-            else:
-                with st.spinner("Downloading YouTube video..."):
-                    success, result = download_youtube(yt_url)
-                    if success:
-                        yt_status.success("✅ Download complete!")
-                        with open(result, "rb") as f:
-                            st.download_button(
-                                label="Save Video",
-                                data=f,
-                                file_name=os.path.basename(result),
-                                mime="video/mp4"
-                            )
-                        os.remove(result)
-                    else:
-                        yt_status.error(f"❌ Error: {result}")
+    if st.button("Download YouTube Video", key="yt_btn"):
+        if yt_url and is_youtube(yt_url):
+            with st.spinner("Downloading..."):
+                success, result = download_media(yt_url, "youtube")
+                if success:
+                    with open(result, "rb") as f:
+                        st.download_button(
+                            "💾 Save Video", 
+                            data=f,
+                            file_name=os.path.basename(result),
+                            mime="video/mp4"
+                        )
+                    os.remove(result)
+                else:
+                    st.error(f"❌ Error: {result}")
         else:
-            yt_status.warning("⚠️ Please enter a YouTube URL")
+            st.warning("⚠️ Please enter a valid YouTube URL")
 
-# Instagram Tab
-with tab_ig:
-    st.subheader("Instagram Reels Downloader")
+# Instagram Downloader
+with insta_tab:
+    st.subheader("Instagram Reels")
+    insta_url = st.text_input("Enter Instagram Reel URL:", placeholder="https://instagram.com/reel/...")
     
     if os.path.exists('cookies.txt'):
-        st.success("✔️ Cookies file detected (private accounts supported)")
+        st.success("🔑 Cookies detected (private accounts supported)")
     else:
-        st.warning("ℹ️ Only public reels supported. Add cookies.txt for private accounts")
+        st.warning("ℹ️ Only public reels work without cookies.txt")
     
-    ig_url = st.text_input(
-        "Enter Instagram Reel URL:",
-        placeholder="https://www.instagram.com/reel/...",
-        key="ig_url"
-    )
-    
-    ig_status = st.empty()
-    
-    if st.button("Download Instagram Reel", key="ig_dl_btn"):
-        if ig_url:
-            if not is_instagram_reel(ig_url):
-                ig_status.error("❌ Invalid Instagram Reel URL")
-            else:
-                with st.spinner("Downloading Instagram reel..."):
-                    success, result = download_instagram(ig_url)
-                    if success:
-                        ig_status.success("✅ Download complete!")
-                        with open(result, "rb") as f:
-                            st.download_button(
-                                label="Save Reel",
-                                data=f,
-                                file_name=os.path.basename(result),
-                                mime="video/mp4"
-                            )
-                        os.remove(result)
-                    else:
-                        ig_status.error(f"❌ Error: {result}")
+    if st.button("Download Instagram Reel", key="ig_btn"):
+        if insta_url and is_instagram(insta_url):
+            with st.spinner("Downloading..."):
+                success, result = download_media(insta_url, "instagram")
+                if success:
+                    with open(result, "rb") as f:
+                        st.download_button(
+                            "💾 Save Reel",
+                            data=f,
+                            file_name=os.path.basename(result),
+                            mime="video/mp4"
+                        )
+                    os.remove(result)
+                else:
+                    st.error(f"❌ Error: {result}")
         else:
-            ig_status.warning("⚠️ Please enter an Instagram URL")
+            st.warning("⚠️ Please enter a valid Instagram Reel URL")
 
-# Footer
+# ======================
+# 📝 Instructions
+# ======================
 st.divider()
 st.markdown("""
-### How to Add Instagram Cookies:
-1. Install the **Get cookies.txt** browser extension
-2. Login to Instagram in your browser
-3. Export cookies as `cookies.txt`
-4. Place the file in the same folder as this app
+### **How to Use:**
+1. **For YouTube**: Paste any video/shorts link  
+   *(Example: `https://youtube.com/shorts/ABC123`)*  
 
-### Test URLs:
-- YouTube: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
-- Instagram: `https://www.instagram.com/reel/CxYlZqJNQZS/`
+2. **For Instagram**:  
+   - Works for **public reels**  
+   - For **private accounts**, add a `cookies.txt` file  
+   *(Get cookies using browser extensions like "Get cookies.txt")*  
+
+### **Why Downloads Fail?**
+- ⏳ Instagram rate limits (wait 5-10 mins)  
+- 🔒 Private account (requires cookies)  
+- ❌ Invalid URL format  
 """)
