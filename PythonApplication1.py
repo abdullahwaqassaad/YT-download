@@ -26,9 +26,7 @@ def download_youtube(url):
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
-            # Verify file was actually downloaded
             if not os.path.exists(filename):
-                # Try alternative filename pattern
                 filename = f"yt_{info['id']}.mp4"
                 if not os.path.exists(filename):
                     return False, "File downloaded but not found"
@@ -40,22 +38,26 @@ def download_youtube(url):
 
 def download_instagram(url):
     try:
+        # Check if cookies file exists
+        cookies_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
+        
         ydl_opts = {
             'format': 'best',
             'outtmpl': 'ig_%(id)s.%(ext)s',
             'quiet': True,
             'extract_flat': False,
             'force_generic_extractor': True,
-            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+            'cookiefile': cookies_file,
             'ignoreerrors': False,
             'retries': 3,
             'socket_timeout': 60,
             'extractor_args': {
                 'instagram': {
-                    'skip_auth': True,
+                    'skip_auth': False if cookies_file else True,
                     'extract_reels': True
                 }
             },
+            'cookiesfrombrowser': ('chrome',) if not cookies_file else None,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -63,10 +65,8 @@ def download_instagram(url):
             if not info:
                 return False, "Failed to extract video info"
             
-            # Multiple fallback filename options
             filename = ydl.prepare_filename(info) if 'id' in info else f"ig_reel_{int(time.time())}.mp4"
             
-            # Verify download
             if not os.path.exists(filename):
                 return False, "File downloaded but not found"
             
@@ -142,6 +142,12 @@ with tab_yt:
 # Instagram Tab
 with tab_ig:
     st.subheader("Instagram Reels Downloader")
+    
+    if os.path.exists('cookies.txt'):
+        st.success("✔️ Cookies file detected (private accounts supported)")
+    else:
+        st.warning("ℹ️ Only public reels supported. Add cookies.txt for private accounts")
+    
     ig_url = st.text_input(
         "Enter Instagram Reel URL:",
         placeholder="https://www.instagram.com/reel/...",
@@ -175,10 +181,13 @@ with tab_ig:
 # Footer
 st.divider()
 st.markdown("""
-**Important Notes:**
-1. For **private Instagram accounts**, create a `cookies.txt` file in the same folder
-2. Instagram downloads may fail if:
-   - The reel is from a private account (without cookies)
-   - You've made too many requests recently
-3. All downloads are automatically deleted after you save them
+### How to Add Instagram Cookies:
+1. Install the **Get cookies.txt** browser extension
+2. Login to Instagram in your browser
+3. Export cookies as `cookies.txt`
+4. Place the file in the same folder as this app
+
+### Test URLs:
+- YouTube: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+- Instagram: `https://www.instagram.com/reel/CxYlZqJNQZS/`
 """)
