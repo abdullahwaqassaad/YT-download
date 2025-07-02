@@ -1,6 +1,7 @@
 import streamlit as st
 import yt_dlp
 import os
+import time
 from urllib.parse import urlparse
 
 # ========================
@@ -19,12 +20,19 @@ def download_youtube(url):
             'retries': 3,
             'socket_timeout': 30,
             'noplaylist': True,
-            'progress_hooks': [youtube_progress_hook],
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
+            
+            # Verify file was actually downloaded
+            if not os.path.exists(filename):
+                # Try alternative filename pattern
+                filename = f"yt_{info['id']}.mp4"
+                if not os.path.exists(filename):
+                    return False, "File downloaded but not found"
+            
             return True, filename
             
     except Exception as e:
@@ -38,7 +46,7 @@ def download_instagram(url):
             'quiet': True,
             'extract_flat': False,
             'force_generic_extractor': True,
-            'cookiefile': 'cookies.txt',
+            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
             'ignoreerrors': False,
             'retries': 3,
             'socket_timeout': 60,
@@ -48,7 +56,6 @@ def download_instagram(url):
                     'extract_reels': True
                 }
             },
-            'progress_hooks': [instagram_progress_hook],
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -58,32 +65,15 @@ def download_instagram(url):
             
             # Multiple fallback filename options
             filename = ydl.prepare_filename(info) if 'id' in info else f"ig_reel_{int(time.time())}.mp4"
+            
+            # Verify download
+            if not os.path.exists(filename):
+                return False, "File downloaded but not found"
+            
             return True, filename
             
     except Exception as e:
         return False, str(e)
-
-# ========================
-# Progress Trackers
-# ========================
-
-def youtube_progress_hook(d):
-    if st.session_state.get('yt_progress_bar'):
-        if d['status'] == 'downloading':
-            percent = d.get('_percent_str', '0%').replace('%','')
-            try:
-                st.session_state.yt_progress_bar.progress(float(percent)/100)
-            except:
-                pass
-
-def instagram_progress_hook(d):
-    if st.session_state.get('ig_progress_bar'):
-        if d['status'] == 'downloading':
-            percent = d.get('_percent_str', '0%').replace('%','')
-            try:
-                st.session_state.ig_progress_bar.progress(float(percent)/100)
-            except:
-                pass
 
 # ========================
 # URL Validators
@@ -125,7 +115,6 @@ with tab_yt:
         key="yt_url"
     )
     
-    st.session_state.yt_progress_bar = st.progress(0)
     yt_status = st.empty()
     
     if st.button("Download YouTube Video", key="yt_dl_btn"):
@@ -133,10 +122,10 @@ with tab_yt:
             if not is_youtube(yt_url):
                 yt_status.error("❌ Invalid YouTube URL")
             else:
-                with st.spinner("Connecting to YouTube..."):
+                with st.spinner("Downloading YouTube video..."):
                     success, result = download_youtube(yt_url)
                     if success:
-                        yt_status.success(f"✅ Download complete: {os.path.basename(result)}")
+                        yt_status.success("✅ Download complete!")
                         with open(result, "rb") as f:
                             st.download_button(
                                 label="Save Video",
@@ -159,7 +148,6 @@ with tab_ig:
         key="ig_url"
     )
     
-    st.session_state.ig_progress_bar = st.progress(0)
     ig_status = st.empty()
     
     if st.button("Download Instagram Reel", key="ig_dl_btn"):
@@ -167,10 +155,10 @@ with tab_ig:
             if not is_instagram_reel(ig_url):
                 ig_status.error("❌ Invalid Instagram Reel URL")
             else:
-                with st.spinner("Connecting to Instagram..."):
+                with st.spinner("Downloading Instagram reel..."):
                     success, result = download_instagram(ig_url)
                     if success:
-                        ig_status.success(f"✅ Download complete: {os.path.basename(result)}")
+                        ig_status.success("✅ Download complete!")
                         with open(result, "rb") as f:
                             st.download_button(
                                 label="Save Reel",
@@ -187,9 +175,10 @@ with tab_ig:
 # Footer
 st.divider()
 st.markdown("""
-**Tips:**
-- For private Instagram accounts, add a `cookies.txt` file
-- YouTube downloads typically work without issues
-- If Instagram fails, try again after some time
-- Downloads are automatically deleted after saving
+**Important Notes:**
+1. For **private Instagram accounts**, create a `cookies.txt` file in the same folder
+2. Instagram downloads may fail if:
+   - The reel is from a private account (without cookies)
+   - You've made too many requests recently
+3. All downloads are automatically deleted after you save them
 """)
